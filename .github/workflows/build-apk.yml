@@ -12,14 +12,20 @@ jobs:
     - name: Checkout Repository
       uses: actions/checkout@v4
 
-    # 1. Netlify Dashboard se bheje gaye Java aur XML code ko sahi paths par save karna
-    # Yeh commands folder banayengi aur user ka code inject karengi
+    # 1. Dashboard se bheje gaye Java aur XML codes ko sahi paths par save karna
+    # Yeh commands folder banayengi aur user ka code safely inject karengi (without syntax errors)
     - name: Inject Java and XML Layout Code
       run: |
-        mkdir -p app/src/main/java/com/example/myapp
+        mkdir -p app/src/main/java/com/ani/vaibhaw/app
         mkdir -p app/src/main/res/layout
-        echo "${{ github.event.client_payload.java_code }}" > app/src/main/java/com/example/myapp/MainActivity.java
-        echo "${{ github.event.client_payload.xml_code }}" > app/src/main/res/layout/activity_main.xml
+        
+        cat << 'EOF' > app/src/main/java/com/ani/vaibhaw/app/MainActivity.java
+        ${{ github.event.client_payload.java_code }}
+        EOF
+        
+        cat << 'EOF' > app/src/main/res/layout/activity_main.xml
+        ${{ github.event.client_payload.xml_code }}
+        EOF
 
     # 2. Java environment configuration (Gradle build ke liye zaroori hai)
     - name: Set up JDK 17
@@ -53,4 +59,3 @@ jobs:
       with:
         name: PlayStore-Ready-AAB
         path: app/build/outputs/bundle/release/app-release.aab
-
