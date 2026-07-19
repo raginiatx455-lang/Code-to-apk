@@ -1,4 +1,4 @@
-name: Build Play Store Ready Java & XML App
+name: Build Samsung Store Ready App
 
 on:
   repository_dispatch:
@@ -12,8 +12,88 @@ jobs:
     - name: Checkout Repository
       uses: actions/checkout@v4
 
-    # 1. Dashboard se bheje gaye Java aur XML codes ko sahi paths par save karna
-    # Yeh commands folder banayengi aur user ka code safely inject karengi (without syntax errors)
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'zulu'
+        java-version: '17'
+
+    - name: Setup Android SDK
+      uses: android-actions/setup-android@v3
+
+    # 1. Gradle Engine auto-generate karna (taaki error na aaye)
+    - name: Auto-Generate Android Skeleton
+      run: |
+        gradle wrapper
+        echo "include ':app'" > settings.gradle
+        
+        cat << 'EOF' > build.gradle
+        buildscript {
+            repositories {
+                google()
+                mavenCentral()
+            }
+            dependencies {
+                classpath "com.android.tools.build:gradle:8.1.0"
+            }
+        }
+        allprojects {
+            repositories {
+                google()
+                mavenCentral()
+            }
+        }
+        EOF
+
+        mkdir -p app
+        cat << 'EOF' > app/build.gradle
+        plugins {
+            id 'com.android.application'
+        }
+        android {
+            namespace 'com.ani.vaibhaw.app'
+            compileSdk 34
+            defaultConfig {
+                applicationId "com.ani.vaibhaw.app"
+                minSdk 24
+                targetSdk 34
+                versionCode 1
+                versionName "1.0"
+            }
+            buildTypes {
+                release {
+                    minifyEnabled false
+                    proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+                }
+            }
+        }
+        dependencies {
+            implementation 'androidx.appcompat:appcompat:1.6.1'
+        }
+        EOF
+
+        mkdir -p app/src/main/res/values
+        cat << 'EOF' > app/src/main/AndroidManifest.xml
+        <?xml version="1.0" encoding="utf-8"?>
+        <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+            <application
+                android:allowBackup="true"
+                android:label="Vaibhaw Ani App"
+                android:supportsRtl="true"
+                android:theme="@style/Theme.AppCompat.Light.NoActionBar">
+                <activity
+                    android:name=".MainActivity"
+                    android:exported="true">
+                    <intent-filter>
+                        <action android:name="android.intent.action.MAIN" />
+                        <category android:name="android.intent.category.LAUNCHER" />
+                    </intent-filter>
+                </activity>
+            </application>
+        </manifest>
+        EOF
+
+    # 2. Tumhari website se aane wale codes ko safely set karna
     - name: Inject Java and XML Layout Code
       run: |
         mkdir -p app/src/main/java/com/ani/vaibhaw/app
@@ -27,35 +107,24 @@ jobs:
         ${{ github.event.client_payload.xml_code }}
         EOF
 
-    # 2. Java environment configuration (Gradle build ke liye zaroori hai)
-    - name: Set up JDK 17
-      uses: actions/setup-java@v4
-      with:
-        distribution: 'zulu'
-        java-version: '17'
-
-    # 3. Real Android SDK automatically download aur configure karna
-    - name: Setup Android SDK
-      uses: android-actions/setup-android@v3
-
-    # 4. GitHub Secrets se secure Keystore file (.jks) generate karna signature ke liye
+    # 3. Security Keystore Decode Karna
     - name: Decode Keystore File
       run: |
         echo "${{ secrets.SIGNING_STORE_FILE_BASE64 }}" | base64 --decode > app/my-release-key.jks
 
-    # 5. Play Store ready Signed Android App Bundle (AAB) compile karna
-    - name: Build Signed Release AAB
+    # 4. Samsung Store ke liye Signed Release APK compile karna (AAB ki jagah APK)
+    - name: Build Signed Release APK
       run: |
         chmod +x gradlew
-        ./gradlew bundleRelease \
+        ./gradlew assembleRelease \
           -Pandroid.injected.signing.store.file=my-release-key.jks \
           -Pandroid.injected.signing.store.password=${{ secrets.SIGNING_STORE_PASSWORD }} \
           -Pandroid.injected.signing.key.alias=${{ secrets.SIGNING_KEY_ALIAS }} \
           -Pandroid.injected.signing.key.password=${{ secrets.SIGNING_KEY_PASSWORD }}
 
-    # 6. Final Signed .aab bundle file ko upload karna taaki link active ho jaye
-    - name: Upload Production AAB Artifact
+    # 5. Final Signed APK file ko upload karna
+    - name: Upload Production APK Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: PlayStore-Ready-AAB
-        path: app/build/outputs/bundle/release/app-release.aab
+        name: Samsung-Store-Ready-APK
+        path: app/build/outputs/apk/release/app-release.apk
