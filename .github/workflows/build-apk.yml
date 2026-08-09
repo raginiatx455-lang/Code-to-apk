@@ -1,4 +1,4 @@
-name: Build Samsung Store Ready App
+name: Build Universal App
 
 on:
   repository_dispatch:
@@ -21,10 +21,11 @@ jobs:
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
 
-    # 1. Gradle Engine auto-generate karna (taaki error na aaye)
+    # 1. Base Android Skeleton Setup
     - name: Auto-Generate Android Skeleton
       run: |
-        gradle wrapper
+        gradle wrapper --gradle-version 8.1.0
+        
         echo "include ':app'" > settings.gradle
         
         cat << 'EOF' > build.gradle
@@ -45,7 +46,11 @@ jobs:
         }
         EOF
 
-        mkdir -p app
+        # Directory structure for code and assets
+        mkdir -p app/src/main/res/layout
+        mkdir -p app/src/main/java/com/ani/vaibhaw/app
+        mkdir -p app/src/main/assets
+        
         cat << 'EOF' > app/build.gradle
         plugins {
             id 'com.android.application'
@@ -72,33 +77,9 @@ jobs:
         }
         EOF
 
-        mkdir -p app/src/main/res/values
-        cat << 'EOF' > app/src/main/AndroidManifest.xml
-        <?xml version="1.0" encoding="utf-8"?>
-        <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-            <application
-                android:allowBackup="true"
-                android:label="Vaibhaw Ani App"
-                android:supportsRtl="true"
-                android:theme="@style/Theme.AppCompat.Light.NoActionBar">
-                <activity
-                    android:name=".MainActivity"
-                    android:exported="true">
-                    <intent-filter>
-                        <action android:name="android.intent.action.MAIN" />
-                        <category android:name="android.intent.category.LAUNCHER" />
-                    </intent-filter>
-                </activity>
-            </application>
-        </manifest>
-        EOF
-
-    # 2. Tumhari website se aane wale codes ko safely set karna
-    - name: Inject Java and XML Layout Code
+    # 2. Injecting Java, XML, and Manifest directly into Android System
+    - name: Inject Core Android Codes
       run: |
-        mkdir -p app/src/main/java/com/ani/vaibhaw/app
-        mkdir -p app/src/main/res/layout
-        
         cat << 'EOF' > app/src/main/java/com/ani/vaibhaw/app/MainActivity.java
         ${{ github.event.client_payload.java_code }}
         EOF
@@ -106,25 +87,75 @@ jobs:
         cat << 'EOF' > app/src/main/res/layout/activity_main.xml
         ${{ github.event.client_payload.xml_code }}
         EOF
+        
+        cat << 'EOF' > app/src/main/AndroidManifest.xml
+        ${{ github.event.client_payload.manifest_code }}
+        EOF
 
-    # 3. Security Keystore Decode Karna
-    - name: Decode Keystore File
+    # 3. Injecting Multi-Languages into Assets Folder
+    - name: Inject Multi-Language Assets
       run: |
-        echo "${{ secrets.SIGNING_STORE_FILE_BASE64 }}" | base64 --decode > app/my-release-key.jks
+        cat << 'EOF' > app/src/main/assets/main.py
+        ${{ github.event.client_payload.python_code }}
+        EOF
 
-    # 4. Samsung Store ke liye Signed Release APK compile karna (AAB ki jagah APK)
-    - name: Build Signed Release APK
+        cat << 'EOF' > app/src/main/assets/main.cpp
+        ${{ github.event.client_payload.cpp_code }}
+        EOF
+
+        cat << 'EOF' > app/src/main/assets/main.c
+        ${{ github.event.client_payload.c_code }}
+        EOF
+
+        cat << 'EOF' > app/src/main/assets/main.cs
+        ${{ github.event.client_payload.csharp_code }}
+        EOF
+
+        cat << 'EOF' > app/src/main/assets/index.html
+        ${{ github.event.client_payload.html5_code }}
+        EOF
+
+        cat << 'EOF' > app/src/main/assets/style.css
+        ${{ github.event.client_payload.css_code }}
+        EOF
+
+        cat << 'EOF' > app/src/main/assets/script.js
+        ${{ github.event.client_payload.js_code }}
+        EOF
+
+        cat << 'EOF' > app/src/main/assets/main.php
+        ${{ github.event.client_payload.php_code }}
+        EOF
+
+    # 4. Smart Keystore Detector 
+    - name: Decode Keystore File
+      env:
+        KEYSTORE_BASE64: ${{ secrets.SIGNING_STORE_FILE_BASE64 }}
+      run: |
+        if [ ! -z "$KEYSTORE_BASE64" ]; then
+          echo "$KEYSTORE_BASE64" | base64 --decode > app/my-release-key.jks
+          echo "Keystore Configured."
+        else
+          echo "No Keystore found. Generating unsigned release."
+        fi
+
+    # 5. Build Samsung Store Ready Release APK
+    - name: Build Release APK
       run: |
         chmod +x gradlew
-        ./gradlew assembleRelease \
-          -Pandroid.injected.signing.store.file=my-release-key.jks \
-          -Pandroid.injected.signing.store.password=${{ secrets.SIGNING_STORE_PASSWORD }} \
-          -Pandroid.injected.signing.key.alias=${{ secrets.SIGNING_KEY_ALIAS }} \
-          -Pandroid.injected.signing.key.password=${{ secrets.SIGNING_KEY_PASSWORD }}
+        if [ -f "app/my-release-key.jks" ]; then
+          ./gradlew assembleRelease \
+            -Pandroid.injected.signing.store.file=my-release-key.jks \
+            -Pandroid.injected.signing.store.password=${{ secrets.SIGNING_STORE_PASSWORD }} \
+            -Pandroid.injected.signing.key.alias=${{ secrets.SIGNING_KEY_ALIAS }} \
+            -Pandroid.injected.signing.key.password=${{ secrets.SIGNING_KEY_PASSWORD }}
+        else
+          ./gradlew assembleRelease
+        fi
 
-    # 5. Final Signed APK file ko upload karna
+    # 6. Upload the Final APK Output
     - name: Upload Production APK Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: Samsung-Store-Ready-APK
-        path: app/build/outputs/apk/release/app-release.apk
+        name: Vaibhaw-Studio-Release-APK
+        path: app/build/outputs/apk/release/*.apk
